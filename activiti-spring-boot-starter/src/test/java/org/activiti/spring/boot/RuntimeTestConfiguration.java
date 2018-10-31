@@ -10,17 +10,24 @@ import org.activiti.api.process.runtime.connector.Connector;
 import org.activiti.api.process.runtime.events.ProcessCompletedEvent;
 import org.activiti.api.process.runtime.events.listener.ProcessRuntimeEventListener;
 import org.activiti.api.task.runtime.events.TaskCreatedEvent;
+import org.activiti.api.task.runtime.events.TaskUpdatedEvent;
 import org.activiti.api.task.runtime.events.listener.TaskRuntimeEventListener;
+import org.activiti.core.common.spring.identity.ExtendedInMemoryUserDetailsManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+
+import static org.assertj.core.api.Assertions.*;
 
 @Configuration
 public class RuntimeTestConfiguration {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(RuntimeTestConfiguration.class);
 
     public static boolean processImageConnectorExecuted = false;
 
@@ -30,44 +37,81 @@ public class RuntimeTestConfiguration {
 
     public static Set<String> createdTasks = new HashSet<>();
 
-    public static Set<String> completedProcesses = new HashSet<>();
+    public static Set<String> updatedTasks = new HashSet<>();
 
+    public static Set<String> completedProcesses = new HashSet<>();
 
     @Bean
     public UserDetailsService myUserDetailsService() {
-        InMemoryUserDetailsManager inMemoryUserDetailsManager = new InMemoryUserDetailsManager();
+        ExtendedInMemoryUserDetailsManager extendedInMemoryUserDetailsManager = new ExtendedInMemoryUserDetailsManager();
 
         List<GrantedAuthority> salaboyAuthorities = new ArrayList<>();
         salaboyAuthorities.add(new SimpleGrantedAuthority("ROLE_ACTIVITI_USER"));
         salaboyAuthorities.add(new SimpleGrantedAuthority("GROUP_activitiTeam"));
 
-        inMemoryUserDetailsManager.createUser(new User("salaboy", "password", salaboyAuthorities));
+        extendedInMemoryUserDetailsManager.createUser(new User("salaboy",
+                                                               "password",
+                                                               salaboyAuthorities));
 
         List<GrantedAuthority> adminAuthorities = new ArrayList<>();
         adminAuthorities.add(new SimpleGrantedAuthority("ROLE_ACTIVITI_ADMIN"));
 
-        inMemoryUserDetailsManager.createUser(new User("admin", "password", adminAuthorities));
+        extendedInMemoryUserDetailsManager.createUser(new User("admin",
+                                                               "password",
+                                                               adminAuthorities));
 
         List<GrantedAuthority> garthAuthorities = new ArrayList<>();
         garthAuthorities.add(new SimpleGrantedAuthority("ROLE_ACTIVITI_USER"));
         garthAuthorities.add(new SimpleGrantedAuthority("GROUP_doctor"));
 
-        inMemoryUserDetailsManager.createUser(new User("garth", "password", garthAuthorities));
+        extendedInMemoryUserDetailsManager.createUser(new User("garth",
+                                                               "password",
+                                                               garthAuthorities));
 
-        return inMemoryUserDetailsManager;
+        return extendedInMemoryUserDetailsManager;
     }
 
     @Bean
     public Connector processImageConnector() {
         return integrationContext -> {
             Map<String, Object> inBoundVariables = integrationContext.getInBoundVariables();
-            System.out.println("My inbound variables keys: " + inBoundVariables.keySet());
-            System.out.println("My inbound variables values: " + inBoundVariables.values());
+            LOGGER.info("My inbound variables keys: " + inBoundVariables.keySet());
+            LOGGER.info("My inbound variables values: " + inBoundVariables.values());
             boolean expectedValue = (Boolean) inBoundVariables.get("expectedKey");
 
             integrationContext.addOutBoundVariable("approved",
                                                    expectedValue);
             processImageConnectorExecuted = true;
+            return integrationContext;
+        };
+    }
+
+    @Bean
+    public Connector processImageActionName() {
+        return integrationContext -> {
+            Map<String, Object> inBoundVariables = integrationContext.getInBoundVariables();
+            LOGGER.info("processImageActionName inbound variables keys: " + inBoundVariables.keySet());
+            LOGGER.info("processImageActionName inbound variables values: " + inBoundVariables.values());
+
+            boolean expectedValue = (Boolean) inBoundVariables.get("expectedKey");
+            integrationContext.addOutBoundVariable("approved",
+                                                   expectedValue);
+            assertThat(((String) inBoundVariables.get("input-variable-name-1"))).isEqualTo("input-variable-name-1");
+            return integrationContext;
+        };
+    }
+
+    @Bean
+    public Connector tagImageActionName() {
+        return integrationContext -> {
+            Map<String, Object> inBoundVariables = integrationContext.getInBoundVariables();
+            LOGGER.info("tagImageActionName inbound variables keys: " + inBoundVariables.keySet());
+            LOGGER.info("tagImageActionName inbound variables values: " + inBoundVariables.values());
+
+            boolean expectedValue = (Boolean) inBoundVariables.get("expectedKey");
+            integrationContext.addOutBoundVariable("approved",
+                                                   expectedValue);
+            assertThat(((String) inBoundVariables.get("input-variable-name-2"))).isEqualTo("input-variable-name-2");
             return integrationContext;
         };
     }
@@ -89,12 +133,17 @@ public class RuntimeTestConfiguration {
     }
 
     @Bean
-    public TaskRuntimeEventListener<TaskCreatedEvent> taskCreatedListener () {
+    public TaskRuntimeEventListener<TaskCreatedEvent> taskCreatedListener() {
         return taskCreated -> createdTasks.add(taskCreated.getEntity().getId());
     }
 
     @Bean
-    public ProcessRuntimeEventListener<ProcessCompletedEvent> processCompletedListener () {
+    public TaskRuntimeEventListener<TaskUpdatedEvent> taskUpdatedListener() {
+        return taskUpdated -> updatedTasks.add(taskUpdated.getEntity().getId());
+    }
+
+    @Bean
+    public ProcessRuntimeEventListener<ProcessCompletedEvent> processCompletedListener() {
         return processCompleted -> completedProcesses.add(processCompleted.getEntity().getId());
     }
 }
